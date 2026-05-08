@@ -1,118 +1,146 @@
-# Codex Rewind Console
+# Codex 回溯台
 
-Codex Rewind Console is a local recovery dashboard for Codex Desktop session history.
+Codex 回溯台是一个本地会话恢复工具，用来处理 Codex Desktop 切换账号、切换 API/custom provider、升级或项目索引异常后，旧聊天记录还在磁盘里但左侧不显示的问题。
 
-It helps when conversations still exist on disk but do not appear in Codex Desktop after switching accounts, providers, API/custom mode, or projects.
+它包含命令行脚本、网页控制台和 Codex Skill。
 
-## Features
+## 功能
 
-- Read-only export of Codex session JSONL files to Markdown.
-- Safe restore helpers for missing `state_5.sqlite` thread rows.
-- API/custom-provider visible copies without modifying original `openai` records.
-- Repair mode for half-converted API-visible copies.
-- Local web dashboard at `http://127.0.0.1:8765/`.
-- Project-level selection before running repair actions.
-- Backup-only action before applying changes.
-- No external Python dependencies.
+- 扫描当前 Codex Desktop 会话数据库和历史 JSONL 会话文件。
+- 将隐藏或缺失的会话导出为 Markdown。
+- 生成 API/custom 模式可见副本，同时保留原始 `openai` 记录。
+- 修复已经创建但处于半转换状态的 API 可见副本。
+- 按项目选择要修复的范围，避免全局误操作。
+- 一键备份当前 Codex 状态文件。
+- 提供本地网页控制台：`http://127.0.0.1:8765/`。
+- 只使用 Python 标准库，不需要安装第三方依赖。
 
-## Safety Model
+## 安全设计
 
-- Source session files are treated as read-only.
-- Original old-provider rows are preserved.
-- Existing API/custom conversations are not overwritten.
-- Apply actions create backups under:
+- 历史会话源文件按只读处理。
+- 不修改原始旧 provider 记录。
+- 不覆盖当前 API/custom 模式中新建的对话。
+- 所有写入操作前都会备份到：
 
 ```text
 %USERPROFILE%\.codex\restore_backups\
 ```
 
-- The web server binds to `127.0.0.1` by default.
-- The dashboard only exposes whitelisted actions; it does not run arbitrary commands.
+- 网页服务默认只监听 `127.0.0.1`。
+- 网页按钮只调用白名单脚本，不接受任意命令执行。
+- 导出的 raw JSONL 可能包含本地路径、命令输出、工具日志或敏感信息，不建议提交到 GitHub。
 
-## Quick Start
+## 快速开始
 
-Clone the repository:
+克隆仓库：
 
 ```powershell
 git clone git@github.com:hairconker/Codex-Rewind-Console.git
 cd Codex-Rewind-Console
 ```
 
-Start the local dashboard:
+启动网页控制台：
 
 ```powershell
 python scripts\codex_recovery_web.py --port 8765
 ```
 
-Open:
+打开：
 
 ```text
 http://127.0.0.1:8765/
 ```
 
-## Command Line Usage
+## 网页控制台能做什么
 
-Show the current Codex history state:
+网页会显示：
+
+- `openai` 原始记录数量。
+- `custom/API` 当前记录数量。
+- 待修复 API 副本数量。
+- 待创建 API 副本数量。
+- 每个项目的普通路径和扩展路径数量。
+- 项目名称、项目路径，以及它是否对应 Codex 左侧项目。
+
+网页按钮支持：
+
+- 备份当前状态。
+- 预检副本修复。
+- 应用副本修复。
+- 预检选中项目修复。
+- 应用选中项目修复。
+- 创建 API 可见副本。
+- 导出全部会话。
+- 导出单个项目会话。
+
+## 命令行用法
+
+查看当前状态：
 
 ```powershell
 python scripts\restore_codex_sessions.py --report
 ```
 
-Export all detected sessions to Markdown and raw JSONL copies:
+导出全部会话为 Markdown，并复制 raw JSONL：
 
 ```powershell
 python scripts\export_codex_sessions.py --output codex-session-export --copy-raw
 ```
 
-Create a backup only:
+只创建备份，不修改任何数据：
 
 ```powershell
 python scripts\restore_codex_sessions.py --backup-only
 ```
 
-Preview API-visible copy repairs:
+预检 API 可见副本修复：
 
 ```powershell
 python scripts\restore_codex_sessions.py --repair-api-visible-copies
 ```
 
-Apply repairs after fully exiting Codex Desktop:
+应用修复：
 
 ```powershell
 python scripts\restore_codex_sessions.py --repair-api-visible-copies --apply
 ```
 
-Repair only selected project paths:
+只修复某个项目：
 
 ```powershell
 python scripts\restore_codex_sessions.py --repair-api-visible-copies --project-exact "E:\biji"
 python scripts\restore_codex_sessions.py --repair-api-visible-copies --project-exact "E:\biji" --apply
 ```
 
-## Important Workflow
+## 重要使用流程
 
-If Codex Desktop is running, it may rewrite `state_5.sqlite` from its in-memory state. For final restore actions:
+Codex Desktop 正在运行时，可能会把内存里的旧状态重新写回 `state_5.sqlite`。因此最终应用修复时建议：
 
-1. Use the dashboard or CLI to inspect and back up.
-2. Fully exit Codex Desktop.
-3. Run the apply command or use the dashboard apply action.
-4. Reopen Codex Desktop.
+1. 先在网页或命令行里查看状态。
+2. 点击“备份当前状态”或运行 `--backup-only`。
+3. 完全退出 Codex Desktop。
+4. 再执行应用修复。
+5. 重新打开 Codex Desktop 查看左侧记录。
 
-## Skill
+如果应用后再次扫描又变回待修复状态，通常说明 Codex Desktop 还没有完全退出。
 
-The bundled Codex skill is in:
+## Codex Skill
+
+Skill 位于：
 
 ```text
 .agents/skills/codex-session-export/
 ```
 
-Install it globally by copying the folder to:
+安装到全局 Skill 目录：
 
 ```text
 %USERPROFILE%\.codex\skills\codex-session-export\
 ```
 
-## Repository Layout
+安装后，Codex 在遇到“聊天记录消失、API 模式隐藏记录、导出/恢复会话”等任务时可以自动加载该 Skill。
+
+## 仓库结构
 
 ```text
 codex_recovery_dashboard.html
@@ -127,8 +155,13 @@ docs/
   codex_session_recovery.md
 ```
 
-## What Not To Commit
+## 不要提交的内容
 
-Do not commit exported sessions or raw JSONL recovery output. They may contain local paths, commands, tool logs, or secrets.
+不要提交导出的会话内容或 raw JSONL。它们可能包含：
 
-The provided `.gitignore` excludes common export and backup directories.
+- 本地路径。
+- shell 命令输出。
+- 工具调用日志。
+- 用户粘贴过的账号、密钥、cookie 或服务器信息。
+
+仓库中的 `.gitignore` 已经排除了常见导出目录和备份文件。
